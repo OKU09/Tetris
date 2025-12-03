@@ -22,18 +22,24 @@ public class Tetris extends JFrame {
 
     private void initUI() {
         statusbar = new JLabel(" 0");
+        statusbar.setForeground(Color.WHITE);
         statusbar.setFont(new Font("SansSerif", Font.BOLD, 20));
         add(statusbar, BorderLayout.SOUTH);
 
-        Board board = new Board(this);
-        add(board);
+        SidePanel sidePanel = new SidePanel();
+        Board board = new Board(this, sidePanel);
+        
+        add(board, BorderLayout.CENTER);
+        add(sidePanel, BorderLayout.EAST);
 
         board.start();
 
-        setTitle("Tetris - Block Out & Lock Out");
-        setSize(400, 850); // バッファゾーンが見えるよう少し高さを調整
+        setTitle("Tetris with Grid & Black Theme");
+        setSize(600, 850); 
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+        // フレーム自体の背景も黒に設定（念のため）
+        getContentPane().setBackground(Color.BLACK);
     }
 
     public JLabel getStatusBar() {
@@ -46,15 +52,78 @@ public class Tetris extends JFrame {
     }
 }
 
+class SidePanel extends JPanel {
+    private final int SQUARE_SIZE = 30;   
+    private Shape nextPiece;
+
+    public SidePanel() {
+        setPreferredSize(new Dimension(200, 800));
+        // 背景色を黒に変更
+        setBackground(Color.BLACK);
+        nextPiece = new Shape();
+        nextPiece.setShape(Tetrominoes.NoShape);
+    }
+
+    public void updateNextPiece(Shape piece) {
+        this.nextPiece = piece;
+        repaint();
+    }
+
+    @Override
+    public void paintComponent(Graphics g) {
+        super.paintComponent(g);
+
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("SansSerif", Font.BOLD, 20));
+        // 文字位置を少し調整
+        g.drawString("NEXT", 70, 60);
+
+        if (nextPiece.getShape() == Tetrominoes.NoShape) return;
+
+        int offsetX = 80;
+        // 【修正点】描画基準位置を下げて重なりを回避 (100 -> 150)
+        int offsetY = 150; 
+
+        for (int i = 0; i < 4; ++i) {
+            int x = nextPiece.x(i);
+            int y = nextPiece.y(i);
+            drawSquare(g, offsetX + x * SQUARE_SIZE, 
+                          offsetY - y * SQUARE_SIZE, 
+                          nextPiece.getShape());
+        }
+    }
+
+    private void drawSquare(Graphics g, int x, int y, Tetrominoes shape) {
+        Color colors[] = {new Color(0, 0, 0), new Color(204, 102, 102),
+            new Color(102, 204, 102), new Color(102, 102, 204),
+            new Color(204, 204, 102), new Color(204, 102, 204),
+            new Color(102, 204, 204), new Color(218, 170, 0)
+        };
+        Color color = colors[shape.ordinal()];
+
+        g.setColor(color);
+        g.fillRect(x + 1, y + 1, SQUARE_SIZE - 2, SQUARE_SIZE - 2);
+
+        g.setColor(color.brighter());
+        g.drawLine(x, y + SQUARE_SIZE - 1, x, y);
+        g.drawLine(x, y, x + SQUARE_SIZE - 1, y);
+
+        g.setColor(color.darker());
+        g.drawLine(x + 1, y + SQUARE_SIZE - 1,
+                x + SQUARE_SIZE - 1, y + SQUARE_SIZE - 1);
+        g.drawLine(x + SQUARE_SIZE - 1, y + SQUARE_SIZE - 1,
+                x + SQUARE_SIZE - 1, y + 1);
+    }
+}
+
 class Board extends JPanel implements ActionListener {
 
-    // フィールド設定
-    private final int VISIBLE_HEIGHT = 20; // 画面に見える高さ（セーフゾーン）
-    private final int HIDDEN_HEIGHT = 2;   // 画面外（出現用バッファ）
-    private final int BOARD_HEIGHT = VISIBLE_HEIGHT + HIDDEN_HEIGHT; // 全体で22段
+    private final int VISIBLE_HEIGHT = 20; 
+    private final int HIDDEN_HEIGHT = 2;   
+    private final int BOARD_HEIGHT = VISIBLE_HEIGHT + HIDDEN_HEIGHT; 
     private final int BOARD_WIDTH = 10;
     
-    private final int PERIOD_INTERVAL = 400; 
+    private final int PERIOD_INTERVAL = 300; 
 
     private Timer timer;
     private boolean isFallingFinished = false;
@@ -65,11 +134,19 @@ class Board extends JPanel implements ActionListener {
     private int curY = 0;
     private JLabel statusbar;
     private Shape curPiece;
+    private Shape nextPiece; 
     private Tetrominoes[] board;
+    private SidePanel sidePanel; 
 
-    public Board(Tetris parent) {
+    public Board(Tetris parent, SidePanel sidePanel) {
         setFocusable(true);
+        // 背景色を黒に変更
+        setBackground(Color.BLACK);
+        this.sidePanel = sidePanel;
+        
         curPiece = new Shape();
+        nextPiece = new Shape(); 
+        
         timer = new Timer(PERIOD_INTERVAL, this);
         timer.start();
 
@@ -87,6 +164,9 @@ class Board extends JPanel implements ActionListener {
         numLinesRemoved = 0;
         clearBoard();
 
+        nextPiece.setRandomShape();
+        sidePanel.updateNextPiece(nextPiece);
+        
         newPiece();
         timer.start();
     }
@@ -114,8 +194,26 @@ class Board extends JPanel implements ActionListener {
     private void doDrawing(Graphics g) {
         Dimension size = getSize();
         int boardTop = (int) size.getHeight() - BOARD_HEIGHT * squareHeight();
+        int boardBottom = boardTop + BOARD_HEIGHT * squareHeight();
+        int boardRight = BOARD_WIDTH * squareWidth();
 
-        // 盤面の描画
+        // --- グリッド線の描画 ---
+        // 黒背景に合わせて、暗いグレーに変更
+        g.setColor(new Color(50, 50, 50));
+
+        // 縦線
+        for (int i = 0; i <= BOARD_WIDTH; ++i) {
+            int x = i * squareWidth();
+            g.drawLine(x, boardTop, x, boardBottom);
+        }
+        // 横線
+        for (int i = 0; i <= BOARD_HEIGHT; ++i) {
+            int y = boardTop + i * squareHeight();
+            g.drawLine(0, y, boardRight, y);
+        }
+        // ---------------------------
+
+        // 盤面のブロック描画
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH; ++j) {
                 Tetrominoes shape = shapeAt(j, BOARD_HEIGHT - i - 1);
@@ -136,15 +234,10 @@ class Board extends JPanel implements ActionListener {
             }
         }
         
-        // --- 境界線の描画 ---
-        // 20段目（VISIBLE_HEIGHT）の上に線を引き、ここから上が「画面外」であることを示す
+        // ロックアウト境界線（赤線）
         int lineY = boardTop + (BOARD_HEIGHT - VISIBLE_HEIGHT) * squareHeight();
         g.setColor(Color.RED);
-        g.drawLine(0, lineY, getSize().width, lineY);
-        
-        // 補足テキスト描画（デバッグ用：画面上で確認しやすくするため）
-        g.setColor(Color.BLACK);
-        g.drawString("Field Limit (Lock Out Line)", 5, lineY - 5);
+        g.fillRect(0, lineY - 1, boardRight, 3); 
     }
 
     private void dropDown() {
@@ -167,7 +260,6 @@ class Board extends JPanel implements ActionListener {
             board[i] = Tetrominoes.NoShape;
     }
 
-    // ブロックが固定された時の処理
     private void pieceDropped() {
         for (int i = 0; i < 4; ++i) {
             int x = curX + curPiece.x(i);
@@ -175,12 +267,9 @@ class Board extends JPanel implements ActionListener {
             board[(y * BOARD_WIDTH) + x] = curPiece.getShape();
         }
 
-        // --- 【ルール2: ロックアウト (Lock Out)】 ---
-        // 条件: 固定されたブロックの全てのパーツが、フィールド外（20段目以上）にある場合
         boolean entirelyOffScreen = true;
         for (int i = 0; i < 4; ++i) {
             int y = curY - curPiece.y(i);
-            // 1つでも「見える領域(0〜19)」にあればセーフ
             if (y < VISIBLE_HEIGHT) {
                 entirelyOffScreen = false;
                 break;
@@ -191,7 +280,6 @@ class Board extends JPanel implements ActionListener {
             gameOver("Game Over (Lock Out)");
             return;
         }
-        // ------------------------------------------
 
         removeFullLines();
 
@@ -199,17 +287,16 @@ class Board extends JPanel implements ActionListener {
             newPiece();
     }
 
-    // 新しいピースを出現させる処理
     private void newPiece() {
-        curPiece.setRandomShape();
-        // 出現位置：中央、かつ高さは20〜21段目付近
+        curPiece.setShape(nextPiece.getShape());
+        nextPiece.setRandomShape();
+        sidePanel.updateNextPiece(nextPiece);
+
         curX = BOARD_WIDTH / 2 + 1;
         curY = BOARD_HEIGHT - 1 + curPiece.minY();
 
-        // --- 【ルール1: ブロックアウト (Block Out)】 ---
-        // 条件: 出現しようとした場所にすでにブロックがあり、置けない場合
         if (!tryMove(curPiece, curX, curY)) {
-            curPiece.setShape(Tetrominoes.NoShape); // 描画を消す
+            curPiece.setShape(Tetrominoes.NoShape);
             gameOver("Game Over (Block Out)");
         }
     }
