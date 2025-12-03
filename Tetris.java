@@ -1,7 +1,7 @@
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font; // 追加: フォント用
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -22,7 +22,6 @@ public class Tetris extends JFrame {
 
     private void initUI() {
         statusbar = new JLabel(" 0");
-        // 文字サイズを大きく設定
         statusbar.setFont(new Font("SansSerif", Font.BOLD, 20));
         add(statusbar, BorderLayout.SOUTH);
 
@@ -31,9 +30,8 @@ public class Tetris extends JFrame {
 
         board.start();
 
-        setTitle("Simple Tetris");
-        // サイズを 200x400 から 400x800 に変更
-        setSize(400, 800);
+        setTitle("Tetris - Block Out & Lock Out");
+        setSize(400, 850); // バッファゾーンが見えるよう少し高さを調整
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
     }
@@ -50,9 +48,13 @@ public class Tetris extends JFrame {
 
 class Board extends JPanel implements ActionListener {
 
+    // フィールド設定
+    private final int VISIBLE_HEIGHT = 20; // 画面に見える高さ（セーフゾーン）
+    private final int HIDDEN_HEIGHT = 2;   // 画面外（出現用バッファ）
+    private final int BOARD_HEIGHT = VISIBLE_HEIGHT + HIDDEN_HEIGHT; // 全体で22段
     private final int BOARD_WIDTH = 10;
-    private final int BOARD_HEIGHT = 22;
-    private final int PERIOD_INTERVAL = 300; 
+    
+    private final int PERIOD_INTERVAL = 400; 
 
     private Timer timer;
     private boolean isFallingFinished = false;
@@ -113,6 +115,7 @@ class Board extends JPanel implements ActionListener {
         Dimension size = getSize();
         int boardTop = (int) size.getHeight() - BOARD_HEIGHT * squareHeight();
 
+        // 盤面の描画
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH; ++j) {
                 Tetrominoes shape = shapeAt(j, BOARD_HEIGHT - i - 1);
@@ -122,6 +125,7 @@ class Board extends JPanel implements ActionListener {
             }
         }
 
+        // 落下中ブロックの描画
         if (curPiece.getShape() != Tetrominoes.NoShape) {
             for (int i = 0; i < 4; ++i) {
                 int x = curX + curPiece.x(i);
@@ -131,6 +135,16 @@ class Board extends JPanel implements ActionListener {
                         curPiece.getShape());
             }
         }
+        
+        // --- 境界線の描画 ---
+        // 20段目（VISIBLE_HEIGHT）の上に線を引き、ここから上が「画面外」であることを示す
+        int lineY = boardTop + (BOARD_HEIGHT - VISIBLE_HEIGHT) * squareHeight();
+        g.setColor(Color.RED);
+        g.drawLine(0, lineY, getSize().width, lineY);
+        
+        // 補足テキスト描画（デバッグ用：画面上で確認しやすくするため）
+        g.setColor(Color.BLACK);
+        g.drawString("Field Limit (Lock Out Line)", 5, lineY - 5);
     }
 
     private void dropDown() {
@@ -153,6 +167,7 @@ class Board extends JPanel implements ActionListener {
             board[i] = Tetrominoes.NoShape;
     }
 
+    // ブロックが固定された時の処理
     private void pieceDropped() {
         for (int i = 0; i < 4; ++i) {
             int x = curX + curPiece.x(i);
@@ -160,23 +175,49 @@ class Board extends JPanel implements ActionListener {
             board[(y * BOARD_WIDTH) + x] = curPiece.getShape();
         }
 
+        // --- 【ルール2: ロックアウト (Lock Out)】 ---
+        // 条件: 固定されたブロックの全てのパーツが、フィールド外（20段目以上）にある場合
+        boolean entirelyOffScreen = true;
+        for (int i = 0; i < 4; ++i) {
+            int y = curY - curPiece.y(i);
+            // 1つでも「見える領域(0〜19)」にあればセーフ
+            if (y < VISIBLE_HEIGHT) {
+                entirelyOffScreen = false;
+                break;
+            }
+        }
+
+        if (entirelyOffScreen) {
+            gameOver("Game Over (Lock Out)");
+            return;
+        }
+        // ------------------------------------------
+
         removeFullLines();
 
         if (!isFallingFinished)
             newPiece();
     }
 
+    // 新しいピースを出現させる処理
     private void newPiece() {
         curPiece.setRandomShape();
+        // 出現位置：中央、かつ高さは20〜21段目付近
         curX = BOARD_WIDTH / 2 + 1;
         curY = BOARD_HEIGHT - 1 + curPiece.minY();
 
+        // --- 【ルール1: ブロックアウト (Block Out)】 ---
+        // 条件: 出現しようとした場所にすでにブロックがあり、置けない場合
         if (!tryMove(curPiece, curX, curY)) {
-            curPiece.setShape(Tetrominoes.NoShape);
-            timer.stop();
-            isStarted = false;
-            statusbar.setText(" Game Over");
+            curPiece.setShape(Tetrominoes.NoShape); // 描画を消す
+            gameOver("Game Over (Block Out)");
         }
+    }
+    
+    private void gameOver(String message) {
+        timer.stop();
+        isStarted = false;
+        statusbar.setText(" " + message);
     }
 
     private boolean tryMove(Shape newPiece, int newX, int newY) {
@@ -283,7 +324,7 @@ class Board extends JPanel implements ActionListener {
             switch (keycode) {
                 case KeyEvent.VK_LEFT: tryMove(curPiece, curX - 1, curY); break;
                 case KeyEvent.VK_RIGHT: tryMove(curPiece, curX + 1, curY); break;
-                case KeyEvent.VK_DOWN: tryMove(curPiece.rotateRight(), curX, curY); break; 
+                case KeyEvent.VK_DOWN: tryMove(curPiece.rotateRight(), curX, curY); break;
                 case KeyEvent.VK_UP: tryMove(curPiece.rotateLeft(), curX, curY); break;
                 case KeyEvent.VK_SPACE: dropDown(); break;
                 case KeyEvent.VK_D: oneLineDown(); break;
