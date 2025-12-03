@@ -22,6 +22,7 @@ public class Tetris extends JFrame {
 
     private void initUI() {
         statusbar = new JLabel(" 0");
+        // 文字色を白に設定
         statusbar.setForeground(Color.WHITE);
         statusbar.setFont(new Font("SansSerif", Font.BOLD, 20));
         add(statusbar, BorderLayout.SOUTH);
@@ -34,11 +35,10 @@ public class Tetris extends JFrame {
 
         board.start();
 
-        setTitle("Tetris with Grid & Black Theme");
+        setTitle("Tetris with HOLD");
         setSize(600, 850); 
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        // フレーム自体の背景も黒に設定（念のため）
         getContentPane().setBackground(Color.BLACK);
     }
 
@@ -52,16 +52,19 @@ public class Tetris extends JFrame {
     }
 }
 
+// 右側に表示するパネル（NEXT と HOLD を表示）
 class SidePanel extends JPanel {
     private final int SQUARE_SIZE = 30;   
     private Shape nextPiece;
+    private Shape holdPiece;
 
     public SidePanel() {
         setPreferredSize(new Dimension(200, 800));
-        // 背景色を黒に変更
         setBackground(Color.BLACK);
         nextPiece = new Shape();
         nextPiece.setShape(Tetrominoes.NoShape);
+        holdPiece = new Shape();
+        holdPiece.setShape(Tetrominoes.NoShape);
     }
 
     public void updateNextPiece(Shape piece) {
@@ -69,27 +72,40 @@ class SidePanel extends JPanel {
         repaint();
     }
 
+    public void updateHoldPiece(Shape piece) {
+        this.holdPiece = piece;
+        repaint();
+    }
+
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
 
+        // --- NEXT 表示 ---
         g.setColor(Color.WHITE);
         g.setFont(new Font("SansSerif", Font.BOLD, 20));
-        // 文字位置を少し調整
         g.drawString("NEXT", 70, 60);
 
-        if (nextPiece.getShape() == Tetrominoes.NoShape) return;
+        if (nextPiece.getShape() != Tetrominoes.NoShape) {
+            drawPiece(g, nextPiece, 80, 150);
+        }
 
-        int offsetX = 80;
-        // 【修正点】描画基準位置を下げて重なりを回避 (100 -> 150)
-        int offsetY = 150; 
+        // --- HOLD 表示 ---
+        g.setColor(Color.WHITE);
+        g.drawString("HOLD", 70, 300); // 少し下に表示
 
+        if (holdPiece.getShape() != Tetrominoes.NoShape) {
+            drawPiece(g, holdPiece, 80, 390);
+        }
+    }
+
+    private void drawPiece(Graphics g, Shape piece, int offsetX, int offsetY) {
         for (int i = 0; i < 4; ++i) {
-            int x = nextPiece.x(i);
-            int y = nextPiece.y(i);
+            int x = piece.x(i);
+            int y = piece.y(i);
             drawSquare(g, offsetX + x * SQUARE_SIZE, 
                           offsetY - y * SQUARE_SIZE, 
-                          nextPiece.getShape());
+                          piece.getShape());
         }
     }
 
@@ -123,29 +139,34 @@ class Board extends JPanel implements ActionListener {
     private final int BOARD_HEIGHT = VISIBLE_HEIGHT + HIDDEN_HEIGHT; 
     private final int BOARD_WIDTH = 10;
     
+    // 【変更点】 速度を 300 -> 400 に変更
     private final int PERIOD_INTERVAL = 400; 
 
     private Timer timer;
     private boolean isFallingFinished = false;
     private boolean isStarted = false;
     private boolean isPaused = false;
+    // ホールド機能用のフラグ（1ターンに1回のみ）
+    private boolean canHold = true; 
+    
     private int numLinesRemoved = 0;
     private int curX = 0;
     private int curY = 0;
     private JLabel statusbar;
     private Shape curPiece;
     private Shape nextPiece; 
+    private Shape holdPiece; // ホールド中のピース
     private Tetrominoes[] board;
     private SidePanel sidePanel; 
 
     public Board(Tetris parent, SidePanel sidePanel) {
         setFocusable(true);
-        // 背景色を黒に変更
         setBackground(Color.BLACK);
         this.sidePanel = sidePanel;
         
         curPiece = new Shape();
         nextPiece = new Shape(); 
+        holdPiece = new Shape(); // 初期化
         
         timer = new Timer(PERIOD_INTERVAL, this);
         timer.start();
@@ -162,7 +183,12 @@ class Board extends JPanel implements ActionListener {
         isStarted = true;
         isFallingFinished = false;
         numLinesRemoved = 0;
+        canHold = true; // 初期化
         clearBoard();
+        
+        // HOLD枠のリセット
+        holdPiece.setShape(Tetrominoes.NoShape);
+        sidePanel.updateHoldPiece(holdPiece);
 
         nextPiece.setRandomShape();
         sidePanel.updateNextPiece(nextPiece);
@@ -185,6 +211,36 @@ class Board extends JPanel implements ActionListener {
         repaint();
     }
 
+    // --- ホールド機能の実装 ---
+    private void hold() {
+        if (!isStarted || isPaused || !canHold) return;
+
+        // 現在のピース形状を一時保存
+        Tetrominoes currentShape = curPiece.getShape();
+        
+        if (holdPiece.getShape() == Tetrominoes.NoShape) {
+            // ホールド枠が空の場合：現在をホールドに入れ、次はNextから持ってくる
+            holdPiece.setShape(currentShape);
+            newPiece();
+        } else {
+            // ホールド枠がある場合：現在とホールドを入れ替える
+            Tetrominoes heldShape = holdPiece.getShape();
+            holdPiece.setShape(currentShape);
+            curPiece.setShape(heldShape);
+            
+            // 位置をリセット（上部中央へ）
+            curX = BOARD_WIDTH / 2 + 1;
+            curY = BOARD_HEIGHT - 1 + curPiece.minY();
+            
+            // リセット後の位置で衝突判定（ゲームオーバー判定にはしないが、念のため）
+            // ※本来はスーパーローテーション等の処理が入るが今回はシンプルに位置リセットのみ
+        }
+
+        sidePanel.updateHoldPiece(holdPiece);
+        canHold = false; // このターンはもうホールドできない
+        repaint();
+    }
+
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -197,23 +253,18 @@ class Board extends JPanel implements ActionListener {
         int boardBottom = boardTop + BOARD_HEIGHT * squareHeight();
         int boardRight = BOARD_WIDTH * squareWidth();
 
-        // --- グリッド線の描画 ---
-        // 黒背景に合わせて、暗いグレーに変更
+        // グリッド線
         g.setColor(new Color(50, 50, 50));
-
-        // 縦線
         for (int i = 0; i <= BOARD_WIDTH; ++i) {
             int x = i * squareWidth();
             g.drawLine(x, boardTop, x, boardBottom);
         }
-        // 横線
         for (int i = 0; i <= BOARD_HEIGHT; ++i) {
             int y = boardTop + i * squareHeight();
             g.drawLine(0, y, boardRight, y);
         }
-        // ---------------------------
 
-        // 盤面のブロック描画
+        // 盤面の描画
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH; ++j) {
                 Tetrominoes shape = shapeAt(j, BOARD_HEIGHT - i - 1);
@@ -234,7 +285,7 @@ class Board extends JPanel implements ActionListener {
             }
         }
         
-        // ロックアウト境界線（赤線）
+        // ロックアウトライン
         int lineY = boardTop + (BOARD_HEIGHT - VISIBLE_HEIGHT) * squareHeight();
         g.setColor(Color.RED);
         g.fillRect(0, lineY - 1, boardRight, 3); 
@@ -294,6 +345,9 @@ class Board extends JPanel implements ActionListener {
 
         curX = BOARD_WIDTH / 2 + 1;
         curY = BOARD_HEIGHT - 1 + curPiece.minY();
+        
+        // 新しいピースが出現したとき、ホールド権限を復活
+        canHold = true;
 
         if (!tryMove(curPiece, curX, curY)) {
             curPiece.setShape(Tetrominoes.NoShape);
@@ -415,6 +469,8 @@ class Board extends JPanel implements ActionListener {
                 case KeyEvent.VK_UP: tryMove(curPiece.rotateLeft(), curX, curY); break;
                 case KeyEvent.VK_SPACE: dropDown(); break;
                 case KeyEvent.VK_D: oneLineDown(); break;
+                // 【追加】 Cキーでホールド
+                case KeyEvent.VK_C: hold(); break; 
             }
         }
     }
