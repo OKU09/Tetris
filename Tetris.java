@@ -123,7 +123,7 @@ class Board extends JPanel implements ActionListener {
     private final int BOARD_HEIGHT = VISIBLE_HEIGHT + HIDDEN_HEIGHT; 
     private final int BOARD_WIDTH = 10;
     
-    private final int PERIOD_INTERVAL = 300; 
+    private final int PERIOD_INTERVAL = 400; 
 
     private Timer timer;
     private boolean isFallingFinished = false;
