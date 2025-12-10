@@ -58,6 +58,9 @@ class SidePanel extends JPanel {
     private Shape nextPiece;
     private Shape holdPiece;
 
+    // アイテムの個数管理用（初期値3個として表示してみます）
+    private int bombCount = 3;
+
     public SidePanel() {
         setPreferredSize(new Dimension(200, 800));
         setBackground(Color.BLACK);
@@ -74,6 +77,12 @@ class SidePanel extends JPanel {
 
     public void updateHoldPiece(Shape piece) {
         this.holdPiece = piece;
+        repaint();
+    }
+
+    // 後でロジックを実装する時に使うためのメソッド
+    public void setBombCount(int count) {
+        this.bombCount = count;
         repaint();
     }
 
@@ -97,6 +106,24 @@ class SidePanel extends JPanel {
         if (holdPiece.getShape() != Tetrominoes.NoShape) {
             drawPiece(g, holdPiece, 80, 390);
         }
+
+        // テキスト表示
+        g.setColor(Color.WHITE);
+        g.drawString("ITEM", 70, 540);
+        
+        // アイコン（爆弾の見た目）を描画
+        int iconX = 60;
+        int iconY = 570;
+        g.setColor(Color.RED);
+        g.fillOval(iconX, iconY, SQUARE_SIZE, SQUARE_SIZE); // 赤い丸
+        g.setColor(Color.YELLOW);
+        g.setFont(new Font("SansSerif", Font.BOLD, 12));
+        g.drawString("B", iconX + 10, iconY + 20); // 中に"B"
+
+        // 個数表示
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("SansSerif", Font.BOLD, 20)); // フォントサイズを戻す
+        g.drawString("x " + bombCount, iconX + 45, iconY + 22);
     }
 
     private void drawPiece(Graphics g, Shape piece, int offsetX, int offsetY) {
@@ -104,7 +131,7 @@ class SidePanel extends JPanel {
             int x = piece.x(i);
             int y = piece.y(i);
             drawSquare(g, offsetX + x * SQUARE_SIZE, 
-                          offsetY - y * SQUARE_SIZE, 
+                          offsetY + y * SQUARE_SIZE, 
                           piece.getShape());
         }
     }
@@ -343,7 +370,7 @@ class Board extends JPanel implements ActionListener {
         nextPiece.setRandomShape();
         sidePanel.updateNextPiece(nextPiece);
 
-        curX = BOARD_WIDTH / 2 + 1;
+        curX = BOARD_WIDTH / 2;
         curY = BOARD_HEIGHT - 1 + curPiece.minY();
         
         // 新しいピースが出現したとき、ホールド権限を復活
