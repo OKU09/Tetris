@@ -24,7 +24,7 @@ public class Tetris extends JFrame {
     }
 
     private void initUI() {
-        statusbar = new JLabel(" Press S to Start"); // 初期メッセージ変更
+        statusbar = new JLabel(" Press S to Start");
         statusbar.setForeground(Color.WHITE);
         statusbar.setFont(new Font("SansSerif", Font.BOLD, 20));
         add(statusbar, BorderLayout.SOUTH);
@@ -35,10 +35,7 @@ public class Tetris extends JFrame {
         add(board, BorderLayout.CENTER);
         add(sidePanel, BorderLayout.EAST);
 
-        // コンストラクタでいきなり start() せず、メニュー待機状態にする
-        // board.start(); 
-
-        setTitle("Tetris Final: Menu & Game");
+        setTitle("Tetris Final: Result Screen");
         setSize(600, 850); 
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
@@ -86,13 +83,6 @@ class SidePanel extends JPanel {
         repaint();
     }
     
-    // ゲーム開始時などにリセットする用
-    public void reset() {
-        nextPiece.setShape(Tetrominoes.NoShape);
-        holdPiece.setShape(Tetrominoes.NoShape);
-        repaint();
-    }
-
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -187,8 +177,9 @@ class Board extends JPanel implements ActionListener {
     private boolean isPaused = false;
     private boolean canHold = true; 
     
-    // メニュー画面用フラグ
+    // 状態管理フラグ
     private boolean isMenu = true; 
+    private boolean isResult = false; // 【追加】リザルト画面かどうか
     
     private boolean isAnimating = false; 
     private List<Integer> animRows = new ArrayList<>(); 
@@ -216,7 +207,6 @@ class Board extends JPanel implements ActionListener {
         holdPiece = new Shape(); 
         
         timer = new Timer(PERIOD_INTERVAL, this);
-        // timer.start(); // ここではスタートしない
         
         statusbar = parent.getStatusBar();
         board = new Tetrominoes[BOARD_WIDTH * BOARD_HEIGHT];
@@ -224,9 +214,9 @@ class Board extends JPanel implements ActionListener {
         clearBoard();
     }
 
-    // ゲーム開始処理
     public void start() {
-        isMenu = false; // メニュー終了
+        isMenu = false;
+        isResult = false; // リザルト解除
         isStarted = true;
         isFallingFinished = false;
         isPaused = false;
@@ -250,8 +240,16 @@ class Board extends JPanel implements ActionListener {
         statusbar.setText("0");
     }
 
+    // メニューに戻る
+    private void goToMenu() {
+        isResult = false;
+        isMenu = true;
+        statusbar.setText(" Press S to Start");
+        repaint();
+    }
+
     private void pause() {
-        if (!isStarted || isMenu) return; // メニュー中は無効
+        if (!isStarted || isMenu || isResult) return; 
 
         isPaused = !isPaused;
         if (isPaused) {
@@ -265,7 +263,7 @@ class Board extends JPanel implements ActionListener {
     }
 
     private void hold() {
-        if (!isStarted || isPaused || !canHold || isAnimating || isMenu) return;
+        if (!isStarted || isPaused || !canHold || isAnimating || isMenu || isResult) return;
 
         Tetrominoes currentShape = curPiece.getShape();
         
@@ -286,7 +284,7 @@ class Board extends JPanel implements ActionListener {
     }
     
     private void useBomb() {
-        if (!isStarted || isPaused || bombCount <= 0 || curPiece.getShape() == Tetrominoes.BombShape || isAnimating || isMenu) {
+        if (!isStarted || isPaused || bombCount <= 0 || curPiece.getShape() == Tetrominoes.BombShape || isAnimating || isMenu || isResult) {
             return;
         }
         
@@ -302,12 +300,13 @@ class Board extends JPanel implements ActionListener {
         
         if (isMenu) {
             drawMenu(g);
+        } else if (isResult) { // リザルト画面
+            drawResult(g);
         } else {
             doDrawing(g);
         }
     }
     
-    // メニュー画面の描画
     private void drawMenu(Graphics g) {
         Dimension size = getSize();
         int w = size.width;
@@ -316,24 +315,22 @@ class Board extends JPanel implements ActionListener {
         g.setColor(Color.BLACK);
         g.fillRect(0, 0, w, h);
 
-        // タイトル
         String title = "TETRIS";
         Font titleFont = new Font("SansSerif", Font.BOLD, 40);
         g.setFont(titleFont);
         g.setColor(Color.ORANGE);
-        drawCenteredString(g, title, w, h / 3);
+        drawCenteredString(g, title, w, h / 4);
 
-        // 開始メッセージ
         String startMsg = "Press 'S' to Start";
         Font msgFont = new Font("SansSerif", Font.BOLD, 20);
         g.setFont(msgFont);
         g.setColor(Color.WHITE);
-        drawCenteredString(g, startMsg, w, h / 2);
+        drawCenteredString(g, startMsg, w, h / 2 - 50);
         
         // 操作説明
         g.setFont(new Font("SansSerif", Font.PLAIN, 14));
         g.setColor(Color.LIGHT_GRAY);
-        int helpY = h / 2 + 60;
+        int helpY = h / 2 + 30;
         int step = 25;
         drawCenteredString(g, "[ Controls ]", w, helpY);
         drawCenteredString(g, "Arrow Keys : Move / Rotate", w, helpY + step);
@@ -341,6 +338,33 @@ class Board extends JPanel implements ActionListener {
         drawCenteredString(g, "C : Hold", w, helpY + step * 3);
         drawCenteredString(g, "B : Use Bomb Item", w, helpY + step * 4);
         drawCenteredString(g, "P : Pause", w, helpY + step * 5);
+    }
+    
+    // 【追加】 リザルト画面の描画
+    private void drawResult(Graphics g) {
+        Dimension size = getSize();
+        int w = size.width;
+        int h = size.height;
+
+        // 背景を黒く
+        g.setColor(Color.BLACK);
+        g.fillRect(0, 0, w, h);
+
+        // GAME OVER
+        g.setFont(new Font("SansSerif", Font.BOLD, 40));
+        g.setColor(Color.RED);
+        drawCenteredString(g, "GAME OVER", w, h / 3);
+
+        // スコア表示
+        g.setFont(new Font("SansSerif", Font.BOLD, 30));
+        g.setColor(Color.WHITE);
+        drawCenteredString(g, "Score: " + numLinesRemoved, w, h / 2);
+        
+        // 操作ガイド
+        g.setFont(new Font("SansSerif", Font.PLAIN, 20));
+        g.setColor(Color.LIGHT_GRAY);
+        drawCenteredString(g, "Press 'S' to Restart", w, h / 2 + 80);
+        drawCenteredString(g, "Press 'M' to Menu", w, h / 2 + 120);
     }
     
     private void drawCenteredString(Graphics g, String text, int width, int y) {
@@ -558,10 +582,8 @@ class Board extends JPanel implements ActionListener {
     private void gameOver(String message) {
         timer.stop();
         isStarted = false;
-        statusbar.setText(" " + message + " (Press S to Restart)");
-        // ゲームオーバー後もメニューに戻れるようにするならフラグ制御が必要だが
-        // ここではSキーで再スタート(start()呼び出し)が可能
-        isMenu = true; // メニュー画面（またはリザルト）に戻す
+        isResult = true; // リザルト画面へ移行
+        statusbar.setText(""); 
         repaint();
     }
 
@@ -617,7 +639,7 @@ class Board extends JPanel implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if (isMenu) return; // メニュー中は処理しない
+        if (isMenu || isResult) return; 
 
         if (isFallingFinished) {
             isFallingFinished = false;
@@ -636,15 +658,25 @@ class Board extends JPanel implements ActionListener {
         public void keyPressed(KeyEvent e) {
             int keycode = e.getKeyCode();
 
-            // --- メニュー画面の処理 ---
+            // --- メニュー画面 ---
             if (isMenu) {
                 if (keycode == 's' || keycode == 'S') {
-                    start(); // ゲーム開始
+                    start();
                 }
                 return;
             }
-            // -----------------------
 
+            // --- リザルト画面 ---
+            if (isResult) {
+                if (keycode == 's' || keycode == 'S') {
+                    start(); // リスタート
+                } else if (keycode == 'm' || keycode == 'M') {
+                    goToMenu(); // メニューへ
+                }
+                return;
+            }
+
+            // --- ゲーム中 ---
             if (!isStarted || curPiece.getShape() == Tetrominoes.NoShape || isAnimating) { 
                 return;
             }
