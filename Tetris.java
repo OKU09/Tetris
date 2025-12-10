@@ -35,7 +35,7 @@ public class Tetris extends JFrame {
         add(board, BorderLayout.CENTER);
         add(sidePanel, BorderLayout.EAST);
 
-        setTitle("Tetris Final: Result Screen");
+        setTitle("Tetris Final");
         setSize(600, 850); 
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
@@ -83,6 +83,13 @@ class SidePanel extends JPanel {
         repaint();
     }
     
+    // 【追加】表示をリセットするメソッド
+    public void reset() {
+        nextPiece.setShape(Tetrominoes.NoShape);
+        holdPiece.setShape(Tetrominoes.NoShape);
+        repaint();
+    }
+
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -91,6 +98,7 @@ class SidePanel extends JPanel {
         g.setFont(new Font("SansSerif", Font.BOLD, 20));
         g.drawString("NEXT", 70, 60);
 
+        // NoShapeの場合は描画されない
         if (nextPiece.getShape() != Tetrominoes.NoShape) {
             drawPiece(g, nextPiece, 80, 150);
         }
@@ -177,9 +185,8 @@ class Board extends JPanel implements ActionListener {
     private boolean isPaused = false;
     private boolean canHold = true; 
     
-    // 状態管理フラグ
     private boolean isMenu = true; 
-    private boolean isResult = false; // 【追加】リザルト画面かどうか
+    private boolean isResult = false; 
     
     private boolean isAnimating = false; 
     private List<Integer> animRows = new ArrayList<>(); 
@@ -212,11 +219,14 @@ class Board extends JPanel implements ActionListener {
         board = new Tetrominoes[BOARD_WIDTH * BOARD_HEIGHT];
         addKeyListener(new TAdapter());
         clearBoard();
+        
+        // 初期状態でもサイドパネルをリセット
+        sidePanel.reset();
     }
 
     public void start() {
         isMenu = false;
-        isResult = false; // リザルト解除
+        isResult = false;
         isStarted = true;
         isFallingFinished = false;
         isPaused = false;
@@ -240,10 +250,11 @@ class Board extends JPanel implements ActionListener {
         statusbar.setText("0");
     }
 
-    // メニューに戻る
     private void goToMenu() {
         isResult = false;
         isMenu = true;
+        // 【修正】メニューに戻るときにサイドパネルの表示を消す
+        sidePanel.reset();
         statusbar.setText(" Press S to Start");
         repaint();
     }
@@ -300,7 +311,7 @@ class Board extends JPanel implements ActionListener {
         
         if (isMenu) {
             drawMenu(g);
-        } else if (isResult) { // リザルト画面
+        } else if (isResult) {
             drawResult(g);
         } else {
             doDrawing(g);
@@ -327,7 +338,6 @@ class Board extends JPanel implements ActionListener {
         g.setColor(Color.WHITE);
         drawCenteredString(g, startMsg, w, h / 2 - 50);
         
-        // 操作説明
         g.setFont(new Font("SansSerif", Font.PLAIN, 14));
         g.setColor(Color.LIGHT_GRAY);
         int helpY = h / 2 + 30;
@@ -340,27 +350,22 @@ class Board extends JPanel implements ActionListener {
         drawCenteredString(g, "P : Pause", w, helpY + step * 5);
     }
     
-    // 【追加】 リザルト画面の描画
     private void drawResult(Graphics g) {
         Dimension size = getSize();
         int w = size.width;
         int h = size.height;
 
-        // 背景を黒く
         g.setColor(Color.BLACK);
         g.fillRect(0, 0, w, h);
 
-        // GAME OVER
         g.setFont(new Font("SansSerif", Font.BOLD, 40));
         g.setColor(Color.RED);
         drawCenteredString(g, "GAME OVER", w, h / 3);
 
-        // スコア表示
         g.setFont(new Font("SansSerif", Font.BOLD, 30));
         g.setColor(Color.WHITE);
         drawCenteredString(g, "Score: " + numLinesRemoved, w, h / 2);
         
-        // 操作ガイド
         g.setFont(new Font("SansSerif", Font.PLAIN, 20));
         g.setColor(Color.LIGHT_GRAY);
         drawCenteredString(g, "Press 'S' to Restart", w, h / 2 + 80);
@@ -560,7 +565,7 @@ class Board extends JPanel implements ActionListener {
     }
     
     private void checkGameOver() {
-        // 判定は newPiece に委ねる
+        // newPieceで判定
     }
 
     private void newPiece() {
@@ -582,7 +587,7 @@ class Board extends JPanel implements ActionListener {
     private void gameOver(String message) {
         timer.stop();
         isStarted = false;
-        isResult = true; // リザルト画面へ移行
+        isResult = true; 
         statusbar.setText(""); 
         repaint();
     }
@@ -658,7 +663,6 @@ class Board extends JPanel implements ActionListener {
         public void keyPressed(KeyEvent e) {
             int keycode = e.getKeyCode();
 
-            // --- メニュー画面 ---
             if (isMenu) {
                 if (keycode == 's' || keycode == 'S') {
                     start();
@@ -666,17 +670,15 @@ class Board extends JPanel implements ActionListener {
                 return;
             }
 
-            // --- リザルト画面 ---
             if (isResult) {
                 if (keycode == 's' || keycode == 'S') {
-                    start(); // リスタート
+                    start();
                 } else if (keycode == 'm' || keycode == 'M') {
-                    goToMenu(); // メニューへ
+                    goToMenu();
                 }
                 return;
             }
 
-            // --- ゲーム中 ---
             if (!isStarted || curPiece.getShape() == Tetrominoes.NoShape || isAnimating) { 
                 return;
             }
