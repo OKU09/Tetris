@@ -7,6 +7,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -22,7 +24,6 @@ public class Tetris extends JFrame {
 
     private void initUI() {
         statusbar = new JLabel(" 0");
-        // 文字色を白に設定
         statusbar.setForeground(Color.WHITE);
         statusbar.setFont(new Font("SansSerif", Font.BOLD, 20));
         add(statusbar, BorderLayout.SOUTH);
@@ -35,7 +36,7 @@ public class Tetris extends JFrame {
 
         board.start();
 
-        setTitle("Tetris with HOLD");
+        setTitle("Tetris Final: Fixed");
         setSize(600, 850); 
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
@@ -52,14 +53,12 @@ public class Tetris extends JFrame {
     }
 }
 
-// 右側に表示するパネル（NEXT と HOLD を表示）
 class SidePanel extends JPanel {
     private final int SQUARE_SIZE = 30;   
     private Shape nextPiece;
     private Shape holdPiece;
-
-    // アイテムの個数管理用（初期値3個として表示してみます）
-    private int bombCount = 3;
+    
+    private int bombCount = 3; 
 
     public SidePanel() {
         setPreferredSize(new Dimension(200, 800));
@@ -79,8 +78,7 @@ class SidePanel extends JPanel {
         this.holdPiece = piece;
         repaint();
     }
-
-    // 後でロジックを実装する時に使うためのメソッド
+    
     public void setBombCount(int count) {
         this.bombCount = count;
         repaint();
@@ -90,7 +88,6 @@ class SidePanel extends JPanel {
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        // --- NEXT 表示 ---
         g.setColor(Color.WHITE);
         g.setFont(new Font("SansSerif", Font.BOLD, 20));
         g.drawString("NEXT", 70, 60);
@@ -99,30 +96,27 @@ class SidePanel extends JPanel {
             drawPiece(g, nextPiece, 80, 150);
         }
 
-        // --- HOLD 表示 ---
         g.setColor(Color.WHITE);
-        g.drawString("HOLD", 70, 300); // 少し下に表示
+        g.drawString("HOLD", 70, 300);
 
         if (holdPiece.getShape() != Tetrominoes.NoShape) {
             drawPiece(g, holdPiece, 80, 390);
         }
-
-        // テキスト表示
-        g.setColor(Color.WHITE);
-        g.drawString("ITEM", 70, 540);
         
-        // アイコン（爆弾の見た目）を描画
+        g.setColor(Color.WHITE);
+        g.drawString("ITEM (Key:B)", 50, 540);
+        
         int iconX = 60;
         int iconY = 570;
+        
         g.setColor(Color.RED);
-        g.fillOval(iconX, iconY, SQUARE_SIZE, SQUARE_SIZE); // 赤い丸
+        g.fillOval(iconX, iconY, SQUARE_SIZE, SQUARE_SIZE);
         g.setColor(Color.YELLOW);
         g.setFont(new Font("SansSerif", Font.BOLD, 12));
-        g.drawString("B", iconX + 10, iconY + 20); // 中に"B"
+        g.drawString("B", iconX + 10, iconY + 20);
 
-        // 個数表示
         g.setColor(Color.WHITE);
-        g.setFont(new Font("SansSerif", Font.BOLD, 20)); // フォントサイズを戻す
+        g.setFont(new Font("SansSerif", Font.BOLD, 20));
         g.drawString("x " + bombCount, iconX + 45, iconY + 22);
     }
 
@@ -140,9 +134,20 @@ class SidePanel extends JPanel {
         Color colors[] = {new Color(0, 0, 0), new Color(204, 102, 102),
             new Color(102, 204, 102), new Color(102, 102, 204),
             new Color(204, 204, 102), new Color(204, 102, 204),
-            new Color(102, 204, 204), new Color(218, 170, 0)
+            new Color(102, 204, 204), new Color(218, 170, 0),
+            new Color(255, 50, 50) 
         };
+        
         Color color = colors[shape.ordinal()];
+        
+        if (shape == Tetrominoes.BombShape) {
+            g.setColor(Color.RED);
+            g.fillOval(x + 2, y + 2, SQUARE_SIZE - 4, SQUARE_SIZE - 4);
+            g.setColor(Color.YELLOW);
+            g.setFont(new Font("SansSerif", Font.BOLD, 12));
+            g.drawString("B", x + 8, y + 20);
+            return;
+        }
 
         g.setColor(color);
         g.fillRect(x + 1, y + 1, SQUARE_SIZE - 2, SQUARE_SIZE - 2);
@@ -165,24 +170,27 @@ class Board extends JPanel implements ActionListener {
     private final int HIDDEN_HEIGHT = 2;   
     private final int BOARD_HEIGHT = VISIBLE_HEIGHT + HIDDEN_HEIGHT; 
     private final int BOARD_WIDTH = 10;
-    
-    // 【変更点】 速度を 300 -> 400 に変更
     private final int PERIOD_INTERVAL = 400; 
 
     private Timer timer;
     private boolean isFallingFinished = false;
     private boolean isStarted = false;
     private boolean isPaused = false;
-    // ホールド機能用のフラグ（1ターンに1回のみ）
     private boolean canHold = true; 
     
+    private boolean isAnimating = false; 
+    private List<Integer> animRows = new ArrayList<>(); 
+    private Color animColor = Color.WHITE; 
+    
+    private int bombCount = 3; 
+
     private int numLinesRemoved = 0;
     private int curX = 0;
     private int curY = 0;
     private JLabel statusbar;
     private Shape curPiece;
     private Shape nextPiece; 
-    private Shape holdPiece; // ホールド中のピース
+    private Shape holdPiece; 
     private Tetrominoes[] board;
     private SidePanel sidePanel; 
 
@@ -193,7 +201,7 @@ class Board extends JPanel implements ActionListener {
         
         curPiece = new Shape();
         nextPiece = new Shape(); 
-        holdPiece = new Shape(); // 初期化
+        holdPiece = new Shape(); 
         
         timer = new Timer(PERIOD_INTERVAL, this);
         timer.start();
@@ -209,11 +217,15 @@ class Board extends JPanel implements ActionListener {
 
         isStarted = true;
         isFallingFinished = false;
+        isAnimating = false;
         numLinesRemoved = 0;
-        canHold = true; // 初期化
+        canHold = true;
+        
+        bombCount = 3;
+        sidePanel.setBombCount(bombCount);
+
         clearBoard();
         
-        // HOLD枠のリセット
         holdPiece.setShape(Tetrominoes.NoShape);
         sidePanel.updateHoldPiece(holdPiece);
 
@@ -238,33 +250,35 @@ class Board extends JPanel implements ActionListener {
         repaint();
     }
 
-    // --- ホールド機能の実装 ---
     private void hold() {
-        if (!isStarted || isPaused || !canHold) return;
+        if (!isStarted || isPaused || !canHold || isAnimating) return;
 
-        // 現在のピース形状を一時保存
         Tetrominoes currentShape = curPiece.getShape();
         
         if (holdPiece.getShape() == Tetrominoes.NoShape) {
-            // ホールド枠が空の場合：現在をホールドに入れ、次はNextから持ってくる
             holdPiece.setShape(currentShape);
             newPiece();
         } else {
-            // ホールド枠がある場合：現在とホールドを入れ替える
             Tetrominoes heldShape = holdPiece.getShape();
             holdPiece.setShape(currentShape);
             curPiece.setShape(heldShape);
-            
-            // 位置をリセット（上部中央へ）
-            curX = BOARD_WIDTH / 2 + 1;
+            curX = BOARD_WIDTH / 2;
             curY = BOARD_HEIGHT - 1 + curPiece.minY();
-            
-            // リセット後の位置で衝突判定（ゲームオーバー判定にはしないが、念のため）
-            // ※本来はスーパーローテーション等の処理が入るが今回はシンプルに位置リセットのみ
         }
 
         sidePanel.updateHoldPiece(holdPiece);
-        canHold = false; // このターンはもうホールドできない
+        canHold = false; 
+        repaint();
+    }
+    
+    private void useBomb() {
+        if (!isStarted || isPaused || bombCount <= 0 || curPiece.getShape() == Tetrominoes.BombShape || isAnimating) {
+            return;
+        }
+        
+        bombCount--;
+        sidePanel.setBombCount(bombCount);
+        curPiece.setShape(Tetrominoes.BombShape);
         repaint();
     }
 
@@ -280,7 +294,6 @@ class Board extends JPanel implements ActionListener {
         int boardBottom = boardTop + BOARD_HEIGHT * squareHeight();
         int boardRight = BOARD_WIDTH * squareWidth();
 
-        // グリッド線
         g.setColor(new Color(50, 50, 50));
         for (int i = 0; i <= BOARD_WIDTH; ++i) {
             int x = i * squareWidth();
@@ -291,7 +304,6 @@ class Board extends JPanel implements ActionListener {
             g.drawLine(0, y, boardRight, y);
         }
 
-        // 盤面の描画
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH; ++j) {
                 Tetrominoes shape = shapeAt(j, BOARD_HEIGHT - i - 1);
@@ -301,7 +313,6 @@ class Board extends JPanel implements ActionListener {
             }
         }
 
-        // 落下中ブロックの描画
         if (curPiece.getShape() != Tetrominoes.NoShape) {
             for (int i = 0; i < 4; ++i) {
                 int x = curX + curPiece.x(i);
@@ -312,7 +323,14 @@ class Board extends JPanel implements ActionListener {
             }
         }
         
-        // ロックアウトライン
+        if (isAnimating) {
+            g.setColor(animColor);
+            for (int y : animRows) {
+                int drawY = boardTop + (BOARD_HEIGHT - y - 1) * squareHeight();
+                g.fillRect(0, drawY, boardRight, squareHeight());
+            }
+        }
+        
         int lineY = boardTop + (BOARD_HEIGHT - VISIBLE_HEIGHT) * squareHeight();
         g.setColor(Color.RED);
         g.fillRect(0, lineY - 1, boardRight, 3); 
@@ -339,41 +357,144 @@ class Board extends JPanel implements ActionListener {
     }
 
     private void pieceDropped() {
+        boolean isBomb = (curPiece.getShape() == Tetrominoes.BombShape);
+
         for (int i = 0; i < 4; ++i) {
             int x = curX + curPiece.x(i);
             int y = curY - curPiece.y(i);
             board[(y * BOARD_WIDTH) + x] = curPiece.getShape();
         }
-
-        boolean entirelyOffScreen = true;
-        for (int i = 0; i < 4; ++i) {
-            int y = curY - curPiece.y(i);
-            if (y < VISIBLE_HEIGHT) {
-                entirelyOffScreen = false;
-                break;
-            }
-        }
-
-        if (entirelyOffScreen) {
-            gameOver("Game Over (Lock Out)");
+        
+        if (isBomb) {
+            explode(curX, curY); 
             return;
         }
 
-        removeFullLines();
+        checkAndRemoveLines(); 
+    }
+    
+    private void startAnimation(List<Integer> rows, Color color, ActionListener onFinish) {
+        if (rows.isEmpty()) {
+            onFinish.actionPerformed(null);
+            return;
+        }
 
-        if (!isFallingFinished)
-            newPiece();
+        isAnimating = true;
+        animRows = rows; // リストの参照を保持
+        animColor = color;
+        timer.stop();
+        repaint();
+
+        Timer animTimer = new Timer(200, e -> {
+            isAnimating = false;
+            ((Timer)e.getSource()).stop();
+
+            // 【重要修正】データを消す処理(onFinish)を「先」に実行する！
+            // 以前はここで animRows.clear() を先に呼んでしまい、
+            // onFinish内で参照しているリストの中身まで空になっていました。
+            onFinish.actionPerformed(null); 
+            
+            // 処理が終わってからクリア
+            animRows.clear();
+            
+            if (isStarted) {
+                if (!isFallingFinished) newPiece();
+                timer.start();
+            }
+            repaint();
+        });
+        animTimer.setRepeats(false);
+        animTimer.start();
+    }
+
+    private void explode(int centerX, int centerY) {
+        List<Integer> rowsToExplode = new ArrayList<>();
+        for (int y = centerY - 1; y <= centerY + 1; y++) {
+            if (y >= 0 && y < BOARD_HEIGHT) {
+                rowsToExplode.add(y);
+            }
+        }
+
+        startAnimation(rowsToExplode, new Color(255, 165, 0, 200), e -> {
+            for (int y : rowsToExplode) {
+                for (int x = 0; x < BOARD_WIDTH; x++) {
+                    board[(y * BOARD_WIDTH) + x] = Tetrominoes.NoShape;
+                }
+            }
+            checkGameOver();
+        });
+    }
+
+    private void checkAndRemoveLines() {
+        List<Integer> fullLines = new ArrayList<>();
+
+        for (int i = BOARD_HEIGHT - 1; i >= 0; --i) {
+            boolean lineIsFull = true;
+            for (int j = 0; j < BOARD_WIDTH; ++j) {
+                if (shapeAt(j, i) == Tetrominoes.NoShape) {
+                    lineIsFull = false;
+                    break;
+                }
+            }
+            if (lineIsFull) {
+                fullLines.add(i);
+            }
+        }
+
+        if (fullLines.isEmpty()) {
+            checkGameOver();
+            if (!isFallingFinished) newPiece();
+            return;
+        }
+
+        startAnimation(fullLines, new Color(255, 255, 255, 180), e -> {
+            doRemoveLinesLogic();
+            checkGameOver();
+        });
+    }
+
+    private void doRemoveLinesLogic() {
+        int numFullLines = 0;
+        for (int i = BOARD_HEIGHT - 1; i >= 0; --i) {
+            boolean lineIsFull = true;
+            for (int j = 0; j < BOARD_WIDTH; ++j) {
+                if (shapeAt(j, i) == Tetrominoes.NoShape) {
+                    lineIsFull = false;
+                    break;
+                }
+            }
+            if (lineIsFull) {
+                ++numFullLines;
+                for (int k = i; k < BOARD_HEIGHT - 1; ++k) {
+                    for (int j = 0; j < BOARD_WIDTH; ++j)
+                         board[(k * BOARD_WIDTH) + j] = shapeAt(j, k + 1);
+                }
+                // 最上段をクリア
+                for (int j = 0; j < BOARD_WIDTH; ++j) {
+                     board[((BOARD_HEIGHT - 1) * BOARD_WIDTH) + j] = Tetrominoes.NoShape;
+                }
+                i++; 
+            }
+        }
+        if (numFullLines > 0) {
+            numLinesRemoved += numFullLines;
+            statusbar.setText(String.valueOf(numLinesRemoved));
+        }
+    }
+    
+    private void checkGameOver() {
+        // 簡易判定: 次が出せない場合はnewPieceで判定されるためここでは何もしない
+        // 必要に応じてロックアウト判定などを追加可能
     }
 
     private void newPiece() {
         curPiece.setShape(nextPiece.getShape());
+        
         nextPiece.setRandomShape();
         sidePanel.updateNextPiece(nextPiece);
 
         curX = BOARD_WIDTH / 2;
         curY = BOARD_HEIGHT - 1 + curPiece.minY();
-        
-        // 新しいピースが出現したとき、ホールド権限を復活
         canHold = true;
 
         if (!tryMove(curPiece, curX, curY)) {
@@ -405,45 +526,24 @@ class Board extends JPanel implements ActionListener {
         return true;
     }
 
-    private void removeFullLines() {
-        int numFullLines = 0;
-
-        for (int i = BOARD_HEIGHT - 1; i >= 0; --i) {
-            boolean lineIsFull = true;
-
-            for (int j = 0; j < BOARD_WIDTH; ++j) {
-                if (shapeAt(j, i) == Tetrominoes.NoShape) {
-                    lineIsFull = false;
-                    break;
-                }
-            }
-
-            if (lineIsFull) {
-                ++numFullLines;
-                for (int k = i; k < BOARD_HEIGHT - 1; ++k) {
-                    for (int j = 0; j < BOARD_WIDTH; ++j)
-                         board[(k * BOARD_WIDTH) + j] = shapeAt(j, k + 1);
-                }
-            }
-        }
-
-        if (numFullLines > 0) {
-            numLinesRemoved += numFullLines;
-            statusbar.setText(String.valueOf(numLinesRemoved));
-            isFallingFinished = true;
-            curPiece.setShape(Tetrominoes.NoShape);
-            repaint();
-        }
-    }
-
     private void drawSquare(Graphics g, int x, int y, Tetrominoes shape) {
         Color colors[] = {new Color(0, 0, 0), new Color(204, 102, 102),
             new Color(102, 204, 102), new Color(102, 102, 204),
             new Color(204, 204, 102), new Color(204, 102, 204),
-            new Color(102, 204, 204), new Color(218, 170, 0)
+            new Color(102, 204, 204), new Color(218, 170, 0),
+            new Color(255, 50, 50) 
         };
 
         Color color = colors[shape.ordinal()];
+        
+        if (shape == Tetrominoes.BombShape) {
+            g.setColor(Color.RED);
+            g.fillOval(x + 2, y + 2, squareWidth() - 4, squareHeight() - 4);
+            g.setColor(Color.YELLOW);
+            g.setFont(new Font("SansSerif", Font.BOLD, 12));
+            g.drawString("B", x + 8, y + 20);
+            return;
+        }
 
         g.setColor(color);
         g.fillRect(x + 1, y + 1, squareWidth() - 2, squareHeight() - 2);
@@ -476,7 +576,7 @@ class Board extends JPanel implements ActionListener {
     class TAdapter extends KeyAdapter {
         @Override
         public void keyPressed(KeyEvent e) {
-            if (!isStarted || curPiece.getShape() == Tetrominoes.NoShape) {
+            if (!isStarted || curPiece.getShape() == Tetrominoes.NoShape || isAnimating) { 
                 return;
             }
 
@@ -496,8 +596,8 @@ class Board extends JPanel implements ActionListener {
                 case KeyEvent.VK_UP: tryMove(curPiece.rotateLeft(), curX, curY); break;
                 case KeyEvent.VK_SPACE: dropDown(); break;
                 case KeyEvent.VK_D: oneLineDown(); break;
-                // 【追加】 Cキーでホールド
                 case KeyEvent.VK_C: hold(); break; 
+                case KeyEvent.VK_B: useBomb(); break;
             }
         }
     }
@@ -505,7 +605,8 @@ class Board extends JPanel implements ActionListener {
 
 enum Tetrominoes {
     NoShape, ZShape, SShape, LineShape,
-    TShape, SquareShape, LShape, MirroredLShape
+    TShape, SquareShape, LShape, MirroredLShape,
+    BombShape
 }
 
 class Shape {
@@ -524,14 +625,15 @@ class Shape {
 
     protected void setShape(Tetrominoes shape) {
         coordsTable = new int[][][]{
-            {{0, 0}, {0, 0}, {0, 0}, {0, 0}},
-            {{0, -1}, {0, 0}, {-1, 0}, {-1, 1}},
-            {{0, -1}, {0, 0}, {1, 0}, {1, 1}},
-            {{0, -1}, {0, 0}, {0, 1}, {0, 2}},
-            {{-1, 0}, {0, 0}, {1, 0}, {0, 1}},
-            {{0, 0}, {1, 0}, {0, 1}, {1, 1}},
-            {{-1, -1}, {0, -1}, {0, 0}, {0, 1}},
-            {{1, -1}, {0, -1}, {0, 0}, {0, 1}}
+            {{0, 0}, {0, 0}, {0, 0}, {0, 0}}, 
+            {{0, -1}, {0, 0}, {-1, 0}, {-1, 1}}, 
+            {{0, -1}, {0, 0}, {1, 0}, {1, 1}}, 
+            {{0, -1}, {0, 0}, {0, 1}, {0, 2}}, 
+            {{-1, 0}, {0, 0}, {1, 0}, {0, 1}}, 
+            {{0, 0}, {1, 0}, {0, 1}, {1, 1}}, 
+            {{-1, -1}, {0, -1}, {0, 0}, {0, 1}}, 
+            {{1, -1}, {0, -1}, {0, 0}, {0, 1}}, 
+            {{0, 0}, {0, 0}, {0, 0}, {0, 0}}  
         };
 
         for (int i = 0; i < 4; i++) {
@@ -550,7 +652,7 @@ class Shape {
 
     public void setRandomShape() {
         var r = new java.util.Random();
-        int x = Math.abs(r.nextInt()) % 7 + 1;
+        int x = Math.abs(r.nextInt()) % 7 + 1; 
         Tetrominoes[] values = Tetrominoes.values();
         setShape(values[x]);
     }
@@ -564,11 +666,10 @@ class Shape {
     }
 
     public Shape rotateLeft() {
-        if (pieceShape == Tetrominoes.SquareShape) return this;
+        if (pieceShape == Tetrominoes.SquareShape || pieceShape == Tetrominoes.BombShape) return this;
 
         Shape result = new Shape();
         result.pieceShape = pieceShape;
-
         for (int i = 0; i < 4; ++i) {
             result.setX(i, y(i));
             result.setY(i, -x(i));
@@ -577,11 +678,10 @@ class Shape {
     }
 
     public Shape rotateRight() {
-        if (pieceShape == Tetrominoes.SquareShape) return this;
+        if (pieceShape == Tetrominoes.SquareShape || pieceShape == Tetrominoes.BombShape) return this;
 
         Shape result = new Shape();
         result.pieceShape = pieceShape;
-
         for (int i = 0; i < 4; ++i) {
             result.setX(i, -y(i));
             result.setY(i, x(i));
