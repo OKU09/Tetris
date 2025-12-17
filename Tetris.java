@@ -12,9 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane; // 入力ダイアログ用
 import javax.swing.JPanel;
 import javax.swing.Timer;
-
 
 public class Tetris extends JFrame {
 
@@ -36,7 +36,7 @@ public class Tetris extends JFrame {
         add(board, BorderLayout.CENTER);
         add(sidePanel, BorderLayout.EAST);
 
-        setTitle("Tetris: Final Version");
+        setTitle("Tetris with DB Ranking");
         setSize(600, 850); 
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
@@ -111,11 +111,9 @@ class SidePanel extends JPanel {
             drawPiece(g, holdPiece, 80, 390);
         }
         
-        // --- ITEMS 表示 ---
         g.setColor(Color.WHITE);
         g.drawString("ITEMS", 70, 540);
         
-        // Bomb (B key)
         int iconX = 40;
         int iconY = 570;
         g.setColor(Color.RED);
@@ -128,7 +126,6 @@ class SidePanel extends JPanel {
         g.setFont(new Font("SansSerif", Font.BOLD, 16));
         g.drawString("x" + bombCount + " (B)", iconX + 40, iconY + 20);
 
-        // Drill (V key)
         int drillY = iconY + 50;
         g.setColor(Color.CYAN); 
         g.fillRect(iconX, drillY, SQUARE_SIZE, SQUARE_SIZE); 
@@ -156,8 +153,8 @@ class SidePanel extends JPanel {
             new Color(102, 204, 102), new Color(102, 102, 204),
             new Color(204, 204, 102), new Color(204, 102, 204),
             new Color(102, 204, 204), new Color(218, 170, 0),
-            new Color(255, 50, 50), // Bomb
-            new Color(0, 255, 255)  // Drill
+            new Color(255, 50, 50), 
+            new Color(0, 255, 255)  
         };
         
         Color color = colors[shape.ordinal()];
@@ -194,7 +191,6 @@ class SidePanel extends JPanel {
                 x + SQUARE_SIZE - 1, y + 1);
     }
     
-    // SidePanel用ヘルパー
     private int squareWidth() { return SQUARE_SIZE; }
     private int squareHeight() { return SQUARE_SIZE; }
 }
@@ -234,6 +230,9 @@ class Board extends JPanel implements ActionListener {
     private Shape holdPiece; 
     private Tetrominoes[] board;
     private SidePanel sidePanel; 
+    
+    // DB用: ランキングデータ保持用
+    private List<String> rankingData = new ArrayList<>();
 
     public Board(Tetris parent, SidePanel sidePanel) {
         setFocusable(true);
@@ -307,11 +306,7 @@ class Board extends JPanel implements ActionListener {
         if (!isStarted || isPaused || !canHold || isAnimating || isMenu || isResult) return;
 
         Tetrominoes currentShape = curPiece.getShape();
-        
-        // 【修正点】 アイテム（爆弾・ドリル）の場合はホールドできないようにする
-        if (currentShape == Tetrominoes.BombShape || currentShape == Tetrominoes.DrillShape) {
-            return;
-        }
+        if (currentShape == Tetrominoes.BombShape || currentShape == Tetrominoes.DrillShape) return;
         
         if (holdPiece.getShape() == Tetrominoes.NoShape) {
             holdPiece.setShape(currentShape);
@@ -370,17 +365,13 @@ class Board extends JPanel implements ActionListener {
         g.setColor(Color.BLACK);
         g.fillRect(0, 0, w, h);
 
-        String title = "TETRIS";
-        Font titleFont = new Font("SansSerif", Font.BOLD, 40);
-        g.setFont(titleFont);
+        g.setFont(new Font("SansSerif", Font.BOLD, 40));
         g.setColor(Color.ORANGE);
-        drawCenteredString(g, title, w, h / 4);
+        drawCenteredString(g, "TETRIS", w, h / 4);
 
-        String startMsg = "Press 'S' to Start";
-        Font msgFont = new Font("SansSerif", Font.BOLD, 20);
-        g.setFont(msgFont);
+        g.setFont(new Font("SansSerif", Font.BOLD, 20));
         g.setColor(Color.WHITE);
-        drawCenteredString(g, startMsg, w, h / 2 - 50);
+        drawCenteredString(g, "Press 'S' to Start", w, h / 2 - 50);
         
         g.setFont(new Font("SansSerif", Font.PLAIN, 14));
         g.setColor(Color.LIGHT_GRAY);
@@ -390,11 +381,12 @@ class Board extends JPanel implements ActionListener {
         drawCenteredString(g, "Arrow Keys : Move / Rotate", w, helpY + step);
         drawCenteredString(g, "Space : Drop", w, helpY + step * 2);
         drawCenteredString(g, "C : Hold", w, helpY + step * 3);
-        drawCenteredString(g, "B : Bomb Item (Row Clear)", w, helpY + step * 4);
-        drawCenteredString(g, "V : Drill Item (Col Clear)", w, helpY + step * 5); 
+        drawCenteredString(g, "B : Bomb Item", w, helpY + step * 4);
+        drawCenteredString(g, "V : Drill Item", w, helpY + step * 5); 
         drawCenteredString(g, "P : Pause", w, helpY + step * 6);
     }
     
+    // ★ ランキング表示の描画 ★
     private void drawResult(Graphics g) {
         Dimension size = getSize();
         int w = size.width;
@@ -405,16 +397,35 @@ class Board extends JPanel implements ActionListener {
 
         g.setFont(new Font("SansSerif", Font.BOLD, 40));
         g.setColor(Color.RED);
-        drawCenteredString(g, "GAME OVER", w, h / 3);
+        drawCenteredString(g, "GAME OVER", w, h / 6);
 
-        g.setFont(new Font("SansSerif", Font.BOLD, 30));
+        g.setFont(new Font("SansSerif", Font.BOLD, 25));
         g.setColor(Color.WHITE);
-        drawCenteredString(g, "Score: " + numLinesRemoved, w, h / 2);
+        drawCenteredString(g, "Your Score: " + numLinesRemoved, w, h / 4);
         
-        g.setFont(new Font("SansSerif", Font.PLAIN, 20));
+        // --- ランキング表示エリア ---
+        g.setColor(Color.YELLOW);
+        g.setFont(new Font("SansSerif", Font.BOLD, 20));
+        drawCenteredString(g, "=== TOP 5 RANKING ===", w, h / 4 + 50);
+        
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Monospaced", Font.PLAIN, 18));
+        int rankY = h / 4 + 90;
+        
+        if (rankingData.isEmpty()) {
+             drawCenteredString(g, "No Data / DB Error", w, rankY);
+        } else {
+            for (String line : rankingData) {
+                drawCenteredString(g, line, w, rankY);
+                rankY += 30;
+            }
+        }
+        // -------------------------
+
+        g.setFont(new Font("SansSerif", Font.PLAIN, 16));
         g.setColor(Color.LIGHT_GRAY);
-        drawCenteredString(g, "Press 'S' to Restart", w, h / 2 + 80);
-        drawCenteredString(g, "Press 'M' to Menu", w, h / 2 + 120);
+        drawCenteredString(g, "Press 'S' to Restart", w, h - 100);
+        drawCenteredString(g, "Press 'M' to Menu", w, h - 70);
     }
     
     private void drawCenteredString(Graphics g, String text, int width, int y) {
@@ -458,15 +469,12 @@ class Board extends JPanel implements ActionListener {
             }
         }
         
-        // アニメーション描画
         if (isAnimating) {
             g.setColor(animColor);
-            
             for (int y : animRows) {
                 int drawY = boardTop + (BOARD_HEIGHT - y - 1) * squareHeight();
                 g.fillRect(0, drawY, boardRight, squareHeight());
             }
-            
             for (int x : animCols) {
                 int drawX = x * squareWidth();
                 g.fillRect(drawX, boardTop, squareWidth(), boardBottom - boardTop);
@@ -512,7 +520,6 @@ class Board extends JPanel implements ActionListener {
             explodeBomb(curX, curY); 
             return;
         }
-        
         if (isDrill) {
             explodeDrill(curX);
             return;
@@ -536,10 +543,8 @@ class Board extends JPanel implements ActionListener {
             isAnimating = false;
             ((Timer)e.getSource()).stop();
             onFinish.actionPerformed(null); 
-            
             animRows.clear();
             animCols.clear();
-            
             if (isStarted) {
                 if (!isFallingFinished) newPiece();
                 timer.start();
@@ -550,7 +555,6 @@ class Board extends JPanel implements ActionListener {
         animTimer.start();
     }
 
-    // 爆弾処理（行）
     private void explodeBomb(int centerX, int centerY) {
         animRows.clear();
         for (int y = centerY - 1; y <= centerY + 1; y++) {
@@ -569,7 +573,6 @@ class Board extends JPanel implements ActionListener {
         });
     }
 
-    // ドリル処理（列）
     private void explodeDrill(int centerX) {
         animCols.clear();
         if (centerX >= 0 && centerX < BOARD_WIDTH) {
@@ -665,10 +668,27 @@ class Board extends JPanel implements ActionListener {
         }
     }
     
+    // ★ ゲームオーバー時の処理（DB連携） ★
     private void gameOver(String message) {
         timer.stop();
         isStarted = false;
         isResult = true; 
+        
+        // 1. 名前入力ダイアログを表示
+        String name = JOptionPane.showInputDialog(this, "Game Over!\nEnter Your Name:", "Rank Entry", JOptionPane.QUESTION_MESSAGE);
+        
+        if (name != null && !name.trim().isEmpty()) {
+            // 2. DBに保存
+            ScoreDAO dao = new ScoreDAO();
+            dao.saveScore(name, numLinesRemoved);
+            
+            // 3. ランキングを取得してメモリに保存
+            rankingData = dao.getTopRanking();
+        } else {
+            rankingData.clear();
+            rankingData.add("No name entered.");
+        }
+
         statusbar.setText(""); 
         repaint();
     }
@@ -826,8 +846,8 @@ class Shape {
             {{0, 0}, {1, 0}, {0, 1}, {1, 1}}, 
             {{-1, -1}, {0, -1}, {0, 0}, {0, 1}}, 
             {{1, -1}, {0, -1}, {0, 0}, {0, 1}}, 
-            {{0, 0}, {0, 0}, {0, 0}, {0, 0}}, // Bomb
-            {{0, 0}, {0, 0}, {0, 0}, {0, 0}}  // Drill
+            {{0, 0}, {0, 0}, {0, 0}, {0, 0}}, 
+            {{0, 0}, {0, 0}, {0, 0}, {0, 0}} 
         };
 
         for (int i = 0; i < 4; i++) {
